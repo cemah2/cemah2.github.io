@@ -62,9 +62,13 @@ nmap --script ssl-enum-ciphers -p 443 10.10.10.6
 | --script ssl-enum-ciphers |  |
 | -p 443 |  |
 
-Cela nous aurait donnée des informations sur les versions de TLS utilisée par la cible et sur les suite de chiffrement. TLSv1.0 serait noté comme faible, tout comme le ssuite de chiffrement non sécurisée.
+Cela nous aurait donnée des informations sur les versions de **TLS** utilisée par la cible et sur les suite de chiffrement. TLSv1.0 serait noté comme faible, tout comme les suite de chiffrement non sécurisée.
 
 Première chose à faire, on ouvre Firefox et on accède à l'url [http://10.10.10.6/](http://10.10.10.6/) pour voire ce qu'il s'y affiche :
+
+## User Flag
+
+### Website - TCP 80
 
 ![Page web par d&#xE9;faut](../../.gitbook/assets/popcorn_2.png)
 
@@ -120,8 +124,65 @@ GENERATED WORDS: 4612
 
 ![](../../.gitbook/assets/popcorn_3.png)
 
-On parcours le site pour voir ce qu'il peut s'y trouver.   
+On parcours le site pour voir ce qu'il peut s'y trouver. On recherche le plus souvent des fonctionnalité d'upload ou des champs de saisie comme des formulaire  
 Il existe une page d'upload, mais elle redirige simplement vers le formulaire de connexion. Il existe une page Parcourir, et elle affiche actuellement un torrent:
 
 ![](../../.gitbook/assets/popcorn_4.png)
+
+Je me suis donc ensuite crée un compte : 
+
+![Inscription](../../.gitbook/assets/popcorn_5.png)
+
+Je me suis donc logger avec mes identifiants et je peux accéder au formulaire d'upload.
+
+![](../../.gitbook/assets/popcorn_8.png)
+
+On peut dans un premier temps uploader un **webshell PHP** mis il y a un erreur :
+
+```php
+<?php
+
+if(isset($_REQUEST['cmd'])){
+        echo "<pre>";
+        $cmd = ($_REQUEST['cmd']);
+        system($cmd);
+        echo "</pre>";
+        die;
+}
+
+?>
+```
+
+![](../../.gitbook/assets/popcorn_9.png)
+
+On peut tester d'upload un fichier torrent \(vous pouvez en récupérer un [ici](https://ubuntu.com/download/alternative-downloads)\) pour voir ce qui se produit. Une fois upload il nous renvoi sur la page du torrent. On peut cliquer sur "**Edit this torrent**" et un pop-up apparait avec un formulaire :
+
+![](../../.gitbook/assets/popcorn_10.png)
+
+On peut voir qu'on peut upload une image. Une fois qu'on upload une image on obtient les informations suivante : 
+
+![](../../.gitbook/assets/popcorn_11.png)
+
+En regardant la page torrent, je vois maintenant l'image téléchargée. En regardant le HTML, l'image est référencée par l'URL suivante:
+
+```bash
+http://10.10.10.6/torrent/thumbnail.php?gd=2&src=./upload/8b851cd45092b458da23ba0ed834906d79f4e2d7.jpg&maxw=96
+```
+
+Je pensais que cela pouvait être un **LFI**, mais il inclut le fichier référencé en tant qu'image, donc même si je peux passer en dehors du répertoire actuel, cela n'aide pas vraiment.  
+Étant donné que le **`src`** ressemble à un chemin, j'ai vérifié [http://10.10.10.6/torrent/upload/](http://10.10.10.6/torrent/upload/), et il a renvoyé une liste de répertoires comprenant mon image téléchargée:
+
+![](../../.gitbook/assets/popcorn_12.png)
+
+### Shell en tant que www-data
+
+Il y a deux possibilités de télécharger des fichiers ici, le torrent et l'image. J'ai commencé avec l'image, si je soumets un simple webshell php, il renvoie «Fichier invalide». Il y a un filtrage que je devrai contourner
+
+Je vais trouver le téléchargement autorisé d'un PNG dans **Burp** et l'envoyer à **Repeater**. Un site Web vérifie les types de fichiers valides de trois manières courantes en les comparant à une liste d'autorisation ou de refus:
+
+* Extension de fichier
+* En-tête `Content-Type`
+* [Magic Bytes](https://en.wikipedia.org/wiki/List_of_file_signatures)
+
+Je vais commencer par en changer un à la fois pour voir si le site se bloque. Tout d'abord, je vais changer l'extension en `.php`. Cela ne semble pas déranger:
 
